@@ -4,17 +4,25 @@ const BASE_URL =
   "https://store.steampowered.com/search/results/?query&dynamic_data=&sort_by=_ASC&snr=1_7_7_popularwishlist_7&filter=popularwishlist&infinite=1";
 const COUNT = 50;
 
-async function fetchPage(start) {
+async function fetchPage(start, retries = 5) {
   const url = `${BASE_URL}&start=${start}&count=${COUNT}`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} at start=${start}`);
-  return res.json();
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+    });
+    if (res.ok) return res.json();
+    if (res.status === 429 && attempt < retries) {
+      const wait = 2000 * 2 ** attempt;
+      console.log(`429 at start=${start}, retrying in ${wait}ms...`);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    throw new Error(`HTTP ${res.status} at start=${start}`);
+  }
 }
 
 function parseAppIds(html) {
@@ -48,7 +56,7 @@ async function run() {
     const data = await fetchPage(start);
     const ids = parseAppIds(data.results_html);
     for (const appId of ids) rows.push([rank++, appId]);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 1000));
   }
 
   const csv = rows.map((r) => r.join(",")).join("\n") + "\n";
