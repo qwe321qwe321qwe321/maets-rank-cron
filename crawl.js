@@ -1,11 +1,13 @@
 const fs = require("fs");
 
-const BASE_URL =
+const WISHLIST_URL =
   "https://store.steampowered.com/search/results/?query&dynamic_data=&sort_by=_ASC&snr=1_7_7_popularwishlist_7&filter=popularwishlist&infinite=1";
+const TOP_SELLER_URL =
+  "https://store.steampowered.com/search/results/?query&dynamic_data=&force_infinite=1&os=win&filter=globaltopsellers&ndl=1&snr=1_7_7_globaltopsellers_7&infinite=1";
 const COUNT = 50;
 
-async function fetchPage(start, retries = 5) {
-  const url = `${BASE_URL}&start=${start}&count=${COUNT}`;
+async function fetchPage(baseUrl, start, retries = 5) {
+  const url = `${baseUrl}&start=${start}&count=${COUNT}`;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(url, {
       headers: {
@@ -35,9 +37,10 @@ function parseAppIds(html) {
   return appIds;
 }
 
-async function run() {
+async function crawl(label, baseUrl, outputFile) {
+  console.log(`\n=== ${label} ===`);
   console.log("Fetching page 0...");
-  const first = await fetchPage(0);
+  const first = await fetchPage(baseUrl, 0);
   const totalCount = first.total_count;
   console.log(`Total: ${totalCount}`);
 
@@ -50,18 +53,22 @@ async function run() {
   const starts = [];
   for (let s = COUNT; s < totalCount; s += COUNT) starts.push(s);
 
-  // fetch remaining pages sequentially to avoid rate limiting
   for (const start of starts) {
     console.log(`Fetching start=${start}...`);
-    const data = await fetchPage(start);
+    const data = await fetchPage(baseUrl, start);
     const ids = parseAppIds(data.results_html);
     for (const appId of ids) rows.push([rank++, appId]);
     await new Promise((r) => setTimeout(r, 1000));
   }
 
   const csv = rows.map((r) => r.join(",")).join("\n") + "\n";
-  fs.writeFileSync("wishlist_rank.csv", csv, "utf8");
-  console.log(`Done: ${rank - 1} entries written.`);
+  fs.writeFileSync(outputFile, csv, "utf8");
+  console.log(`Done: ${rank - 1} entries written to ${outputFile}.`);
+}
+
+async function run() {
+  await crawl("Wishlist Rank", WISHLIST_URL, "wishlist_rank.csv");
+  await crawl("Top Seller Rank", TOP_SELLER_URL, "top_seller_rank.csv");
 }
 
 run().catch((err) => {
