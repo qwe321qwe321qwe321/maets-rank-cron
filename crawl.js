@@ -4,7 +4,8 @@ const WISHLIST_URL =
   "https://store.steampowered.com/search/results/?query&dynamic_data=&sort_by=_ASC&snr=1_7_7_popularwishlist_7&filter=popularwishlist&infinite=1";
 const TOP_SELLER_URL =
   "https://store.steampowered.com/search/results/?query&dynamic_data=&force_infinite=1&os=win&filter=globaltopsellers&ndl=1&snr=1_7_7_globaltopsellers_7&infinite=1";
-const COUNT = 50;
+const COUNT = 100;
+const CONCURRENCY = 5;
 
 async function fetchPage(baseUrl, start, retries = 5) {
   const url = `${baseUrl}&start=${start}&count=${COUNT}`;
@@ -37,6 +38,23 @@ function parseAppIds(html) {
   return appIds;
 }
 
+async function fetchAll(baseUrl, starts) {
+  const results = new Array(starts.length);
+  for (let i = 0; i < starts.length; i += CONCURRENCY) {
+    const batch = starts.slice(i, i + CONCURRENCY);
+    console.log(`Fetching starts: ${batch.join(", ")}...`);
+    const settled = await Promise.allSettled(
+      batch.map((s) => fetchPage(baseUrl, s))
+    );
+    for (let j = 0; j < batch.length; j++) {
+      const r = settled[j];
+      if (r.status === "rejected") throw r.reason;
+      results[i + j] = r.value;
+    }
+  }
+  return results;
+}
+
 async function crawl(label, baseUrl, outputFile) {
   console.log(`\n=== ${label} ===`);
   console.log("Fetching page 0...");
@@ -44,21 +62,16 @@ async function crawl(label, baseUrl, outputFile) {
   const totalCount = first.total_count;
   console.log(`Total: ${totalCount}`);
 
-  const rows = [["rank", "appid"]];
-  let rank = 1;
-
-  const firstIds = parseAppIds(first.results_html);
-  for (const appId of firstIds) rows.push([rank++, appId]);
-
   const starts = [];
   for (let s = COUNT; s < totalCount; s += COUNT) starts.push(s);
 
-  for (const start of starts) {
-    console.log(`Fetching start=${start}...`);
-    const data = await fetchPage(baseUrl, start);
-    const ids = parseAppIds(data.results_html);
-    for (const appId of ids) rows.push([rank++, appId]);
-    await new Promise((r) => setTimeout(r, 1000));
+  const rest = await fetchAll(baseUrl, starts);
+
+  const rows = [["rank", "appid"]];
+  let rank = 1;
+  for (const appId of parseAppIds(first.results_html)) rows.push([rank++, appId]);
+  for (const data of rest) {
+    for (const appId of parseAppIds(data.results_html)) rows.push([rank++, appId]);
   }
 
   const csv = rows.map((r) => r.join(",")).join("\n") + "\n";
