@@ -1,4 +1,4 @@
-name: Steam Wishlist Rank Crawler
+name: Steam Rank Crawler
 
 on:
   schedule:
