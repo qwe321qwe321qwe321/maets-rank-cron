@@ -1,5 +1,38 @@
 const fs = require("fs");
 
+function readCsvRankMap(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  const lines = fs.readFileSync(filePath, "utf8").trim().split("\n");
+  const map = new Map();
+  for (let i = 1; i < lines.length; i++) {
+    const [rank, appid] = lines[i].split(",");
+    if (appid && rank) map.set(appid.trim(), parseInt(rank, 10));
+  }
+  return map;
+}
+
+function generateGrowthCsv(dataRows, prevMap, growthFile) {
+  if (!prevMap) return;
+  const totalCount = dataRows.length;
+  const rows = [];
+  for (const [rank, appid] of dataRows) {
+    let prevRank, rankChange;
+    if (prevMap.has(appid)) {
+      prevRank = prevMap.get(appid);
+      rankChange = prevRank - rank;
+    } else {
+      prevRank = totalCount + 1;
+      rankChange = totalCount - rank + 1;
+    }
+    rows.push([appid, rank, prevRank, rankChange]);
+  }
+  rows.sort((a, b) => b[3] - a[3]);
+  const csv =
+    ["appid,rank,prev_rank,rank_change", ...rows.map((r) => r.join(","))].join("\n") + "\n";
+  fs.writeFileSync(growthFile, csv, "utf8");
+  console.log(`Growth: ${rows.length} entries written to ${growthFile}.`);
+}
+
 const WISHLIST_URL =
   "https://store.steampowered.com/search/results/?query&dynamic_data=&sort_by=_ASC&snr=1_7_7_popularwishlist_7&filter=popularwishlist&infinite=1";
 const TOP_SELLER_URL =
@@ -55,7 +88,7 @@ async function fetchAll(baseUrl, starts) {
   return results;
 }
 
-async function crawl(label, baseUrl, outputFile) {
+async function crawl(label, baseUrl, outputFile, growthFile) {
   console.log(`\n=== ${label} ===`);
   console.log("Fetching page 0...");
   const first = await fetchPage(baseUrl, 0);
@@ -67,21 +100,29 @@ async function crawl(label, baseUrl, outputFile) {
 
   const rest = await fetchAll(baseUrl, starts);
 
-  const rows = [["rank", "appid"]];
+  const dataRows = [];
   let rank = 1;
-  for (const appId of parseAppIds(first.results_html)) rows.push([rank++, appId]);
+  for (const appId of parseAppIds(first.results_html)) dataRows.push([rank++, appId]);
   for (const data of rest) {
-    for (const appId of parseAppIds(data.results_html)) rows.push([rank++, appId]);
+    for (const appId of parseAppIds(data.results_html)) dataRows.push([rank++, appId]);
   }
 
-  const csv = rows.map((r) => r.join(",")).join("\n") + "\n";
+  const bakFile = outputFile + ".bak";
+  if (fs.existsSync(outputFile)) fs.copyFileSync(outputFile, bakFile);
+
+  const csv =
+    ["rank,appid", ...dataRows.map((r) => r.join(","))].join("\n") + "\n";
   fs.writeFileSync(outputFile, csv, "utf8");
-  console.log(`Done: ${rank - 1} entries written to ${outputFile}.`);
+  console.log(`Done: ${dataRows.length} entries written to ${outputFile}.`);
+
+  const prevMap = readCsvRankMap(bakFile);
+  generateGrowthCsv(dataRows, prevMap, growthFile);
+  if (fs.existsSync(bakFile)) fs.unlinkSync(bakFile);
 }
 
 async function run() {
-  await crawl("Wishlist Rank", WISHLIST_URL, "wishlist_rank.csv");
-  await crawl("Top Seller Rank", TOP_SELLER_URL, "top_seller_rank.csv");
+  await crawl("Wishlist Rank", WISHLIST_URL, "wishlist_rank.csv", "wishlist_rank_growth.csv");
+  await crawl("Top Seller Rank", TOP_SELLER_URL, "top_seller_rank.csv", "top_seller_rank_growth.csv");
 }
 
 run().catch((err) => {
