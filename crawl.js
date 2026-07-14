@@ -21,7 +21,7 @@ function generateGrowthCsv(dataRows, prevMap, growthFile) {
       prevRank = prevMap.get(appid);
       rankChange = prevRank - rank;
     } else {
-      prevRank = totalCount + 1;
+      prevRank = "N/A";
       rankChange = totalCount - rank + 1;
     }
     rows.push([appid, rank, prevRank, rankChange]);
