@@ -23,6 +23,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add wishlist_rank.csv top_seller_rank.csv
+          git add wishlist_rank.csv top_seller_rank.csv wishlist_rank_growth.csv top_seller_rank_growth.csv
           git diff --cached --quiet || git commit -m "Update rank CSVs $(date -u +'%Y-%m-%d')"
           git push
