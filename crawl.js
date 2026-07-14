@@ -51,9 +51,9 @@ async function fetchPage(baseUrl, start, retries = 5) {
       },
     });
     if (res.ok) return res.json();
-    if (res.status === 429 && attempt < retries) {
+    if ((res.status === 429 || res.status >= 500) && attempt < retries) {
       const wait = 2000 * 2 ** attempt;
-      console.log(`429 at start=${start}, retrying in ${wait}ms...`);
+      console.log(`${res.status} at start=${start}, retrying in ${wait}ms...`);
       await new Promise((r) => setTimeout(r, wait));
       continue;
     }
