@@ -2,8 +2,7 @@ name: Workflow Watchdog
 
 # maets-crons has few commits, so GitHub may disable its scheduled workflows after
 # 60 days of inactivity. This repo commits daily and stays active, so it watches from here.
-# A failed run triggers GitHub's failure email; set ALERT_CHANNEL_ID (variable) and
-# DISCORD_TOKEN (secret) to also post to Discord.
+# A failed run triggers GitHub's failure email; set the DISCORD_WEBHOOK_URL secret to also post to Discord.
 on:
   schedule:
     - cron: "30 0 * * *"
@@ -16,8 +15,7 @@ jobs:
       - name: Check maets-crons workflow states
         env:
           GH_TOKEN: ${{ github.token }}
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          ALERT_CHANNEL_ID: ${{ vars.ALERT_CHANNEL_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           bad=$(gh api repos/qwe321qwe321qwe321/maets-crons/actions/workflows \
             --jq '.workflows[] | select(.state != "active") | "\(.name) (\(.state))"')
@@ -27,10 +25,9 @@ jobs:
           fi
           echo "::error::Inactive maets-crons workflows:"
           echo "$bad"
-          if [ -n "$DISCORD_TOKEN" ] && [ -n "$ALERT_CHANNEL_ID" ]; then
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
             msg=$(printf '⚠️ maets-crons workflow 未啟用:\n%s\nhttps://github.com/qwe321qwe321qwe321/maets-crons/actions' "$bad")
             jq -n --arg c "$msg" '{content: $c}' | curl -sf -X POST \
-              -H "Authorization: Bot $DISCORD_TOKEN" -H "Content-Type: application/json" \
-              --data @- "https://discord.com/api/v10/channels/$ALERT_CHANNEL_ID/messages" > /dev/null
+              -H "Content-Type: application/json" --data @- "$DISCORD_WEBHOOK_URL" > /dev/null
           fi
           exit 1
